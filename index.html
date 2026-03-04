@@ -9,9 +9,10 @@
     body { font-family: sans-serif; padding: 20px; max-width: 600px; margin: 0 auto; text-align: center; }
     .controls { margin-top: 20px; display: flex; flex-direction: column; gap: 15px; align-items: center; }
     canvas { max-width: 100%; border: 1px dashed #ccc; margin-top: 20px; }
-    button { padding: 10px 20px; background-color: #007BFF; color: white; border: none; border-radius: 5px; cursor: pointer; }
+    button { padding: 10px 20px; background-color: #007BFF; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 16px; }
     button:hover { background-color: #0056b3; }
-    input[type="number"] { width: 80px; padding: 5px; text-align: center; }
+    input[type="number"] { width: 80px; padding: 5px; text-align: center; font-size: 16px; }
+    input[type="file"] { margin: 10px 0; }
   </style>
 </head>
 <body>
@@ -27,7 +28,7 @@
     <div>
       <label><input type="checkbox" id="keepRatio" checked> 保持等比例</label>
     </div>
-    <button id="downloadBtn">下載調整後的圖片</button>
+    <button id="downloadBtn">下載 / 儲存圖片</button>
   </div>
 
   <canvas id="canvas" style="display: none;"></canvas>
@@ -35,7 +36,6 @@
   <script>
     // 註冊 Service Worker (針對 GitHub Pages 子目錄優化)
     if ('serviceWorker' in navigator) {
-      // 取得當前目錄路徑，確保 sw.js 註冊在正確的 Scope
       const swPath = location.pathname.substring(0, location.pathname.lastIndexOf('/')) + '/sw.js';
       navigator.serviceWorker.register(swPath).then(() => console.log('SW 註冊成功'));
     }
@@ -52,6 +52,7 @@
     let img = new Image();
     let originalRatio = 1;
 
+    // 處理圖片上傳
     upload.addEventListener('change', (e) => {
       const file = e.target.files[0];
       if (!file) return;
@@ -71,6 +72,7 @@
       reader.readAsDataURL(file);
     });
 
+    // 將圖片繪製到 Canvas
     function drawImage() {
       const w = parseInt(widthInput.value);
       const h = parseInt(heightInput.value);
@@ -80,6 +82,7 @@
       ctx.drawImage(img, 0, 0, w, h);
     }
 
+    // 寬高連動邏輯
     widthInput.addEventListener('input', () => {
       if (keepRatioCheckbox.checked && widthInput.value) {
         heightInput.value = Math.round(widthInput.value / originalRatio);
@@ -94,11 +97,33 @@
       drawImage();
     });
 
-    downloadBtn.addEventListener('click', () => {
-      const link = document.createElement('a');
-      link.download = 'resized-image.png';
-      link.href = canvas.toDataURL('image/png');
-      link.click();
+    // 下載 / 分享圖片邏輯 (支援 iOS 原生儲存至相簿與 PC 下載)
+    downloadBtn.addEventListener('click', async () => {
+      const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+      if (!blob) return;
+
+      const file = new File([blob], 'resized-image.png', { type: 'image/png' });
+
+      // 檢查是否為支援檔案分享的裝置 (如 iPhone / iOS Safari)
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        try {
+          await navigator.share({
+            files: [file],
+            title: '下載調整後的圖片'
+          });
+          console.log('分享/儲存成功');
+        } catch (error) {
+          console.log('使用者取消或分享失敗', error);
+        }
+      } else {
+        // Fallback: 不支援分享的裝置退回傳統 <a> 標籤下載
+        const link = document.createElement('a');
+        link.download = 'resized-image.png';
+        link.href = URL.createObjectURL(blob);
+        link.click();
+        
+        setTimeout(() => URL.revokeObjectURL(link.href), 100);
+      }
     });
   </script>
 </body>
