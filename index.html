@@ -7,26 +7,84 @@
   <link rel="manifest" href="manifest.json">
   <style>
     body { font-family: sans-serif; padding: 20px; max-width: 600px; margin: 0 auto; text-align: center; }
+    
+    /* 上傳區塊專屬樣式 */
+    .upload-area {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      margin: 40px 0;
+      gap: 20px;
+    }
+
+    /* 放大 5 倍的自訂按鈕 */
+    .huge-btn {
+      /* 原本預設大約 16px，這裡放大到大約 4rem (約 64px)，兼顧 iPhone 寬度與極大化的視覺效果 */
+      font-size: 4rem; 
+      padding: 20px 40px;
+      background-color: #28a745;
+      color: white;
+      border-radius: 20px;
+      cursor: pointer;
+      box-shadow: 0 6px 15px rgba(0,0,0,0.2);
+      max-width: 90vw; /* 避免在手機螢幕上超出寬度 */
+      box-sizing: border-box;
+      line-height: 1.2;
+    }
+    
+    .huge-btn:active {
+      background-color: #218838;
+      transform: scale(0.98);
+    }
+
+    /* 放大 5 倍的提示字樣 */
+    .huge-text {
+      font-size: 3.5rem; 
+      color: #666;
+      font-weight: bold;
+      max-width: 90vw;
+      word-break: break-all; /* 若檔名過長可自動換行 */
+      text-align: center;
+    }
+
+    /* 其他控制項樣式 */
     .controls { margin-top: 20px; display: flex; flex-direction: column; gap: 15px; align-items: center; }
     canvas { max-width: 100%; border: 1px dashed #ccc; margin-top: 20px; }
-    button { padding: 10px 20px; background-color: #007BFF; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 16px; }
-    button:hover { background-color: #0056b3; }
-    input[type="number"] { width: 80px; padding: 5px; text-align: center; font-size: 16px; }
-    input[type="file"] { margin: 10px 0; }
+    
+    #downloadBtn { 
+      padding: 15px 30px; 
+      background-color: #007BFF; 
+      color: white; 
+      border: none; 
+      border-radius: 10px; 
+      cursor: pointer; 
+      font-size: 20px; 
+    }
+    #downloadBtn:hover { background-color: #0056b3; }
+    input[type="number"] { width: 100px; padding: 10px; text-align: center; font-size: 20px; }
   </style>
 </head>
 <body>
   <h1>圖片尺寸調整器</h1>
-  <input type="file" id="upload" accept="image/*">
+  
+  <!-- 自訂的超大上傳按鈕與文字 -->
+  <div class="upload-area">
+    <label for="upload" class="huge-btn">選擇檔案</label>
+    <div id="file-status" class="huge-text">尚未選取檔案</div>
+  </div>
+  
+  <!-- 隱藏原生的 input 檔案選擇器 -->
+  <input type="file" id="upload" accept="image/*" style="display: none;">
   
   <div class="controls" style="display: none;" id="controls">
-    <div>
+    <div style="font-size: 20px;">
       <label>寬度: <input type="number" id="width"> px</label>
       <span style="margin: 0 10px;">x</span>
       <label>高度: <input type="number" id="height"> px</label>
     </div>
-    <div>
-      <label><input type="checkbox" id="keepRatio" checked> 保持等比例</label>
+    <div style="font-size: 20px;">
+      <label><input type="checkbox" id="keepRatio" checked style="transform: scale(1.5); margin-right: 10px;"> 保持等比例</label>
     </div>
     <button id="downloadBtn">下載 / 儲存圖片</button>
   </div>
@@ -34,7 +92,6 @@
   <canvas id="canvas" style="display: none;"></canvas>
 
   <script>
-    // 註冊 Service Worker (針對 GitHub Pages 子目錄優化)
     if ('serviceWorker' in navigator) {
       const swPath = location.pathname.substring(0, location.pathname.lastIndexOf('/')) + '/sw.js';
       navigator.serviceWorker.register(swPath).then(() => console.log('SW 註冊成功'));
@@ -48,14 +105,22 @@
     const ctx = canvas.getContext('2d');
     const controls = document.getElementById('controls');
     const downloadBtn = document.getElementById('downloadBtn');
+    const fileStatus = document.getElementById('file-status'); // 抓取超大提示字樣元素
 
     let img = new Image();
     let originalRatio = 1;
 
-    // 處理圖片上傳
     upload.addEventListener('change', (e) => {
       const file = e.target.files[0];
-      if (!file) return;
+      if (!file) {
+        fileStatus.textContent = '尚未選取檔案';
+        controls.style.display = 'none';
+        canvas.style.display = 'none';
+        return;
+      }
+
+      // 選取檔案後，將超大提示字體改為該圖片的檔名
+      fileStatus.textContent = file.name;
 
       const reader = new FileReader();
       reader.onload = (event) => {
@@ -72,7 +137,6 @@
       reader.readAsDataURL(file);
     });
 
-    // 將圖片繪製到 Canvas
     function drawImage() {
       const w = parseInt(widthInput.value);
       const h = parseInt(heightInput.value);
@@ -82,7 +146,6 @@
       ctx.drawImage(img, 0, 0, w, h);
     }
 
-    // 寬高連動邏輯
     widthInput.addEventListener('input', () => {
       if (keepRatioCheckbox.checked && widthInput.value) {
         heightInput.value = Math.round(widthInput.value / originalRatio);
@@ -97,14 +160,12 @@
       drawImage();
     });
 
-    // 下載 / 分享圖片邏輯 (支援 iOS 原生儲存至相簿與 PC 下載)
     downloadBtn.addEventListener('click', async () => {
       const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
       if (!blob) return;
 
       const file = new File([blob], 'resized-image.png', { type: 'image/png' });
 
-      // 檢查是否為支援檔案分享的裝置 (如 iPhone / iOS Safari)
       if (navigator.canShare && navigator.canShare({ files: [file] })) {
         try {
           await navigator.share({
@@ -116,7 +177,6 @@
           console.log('使用者取消或分享失敗', error);
         }
       } else {
-        // Fallback: 不支援分享的裝置退回傳統 <a> 標籤下載
         const link = document.createElement('a');
         link.download = 'resized-image.png';
         link.href = URL.createObjectURL(blob);
